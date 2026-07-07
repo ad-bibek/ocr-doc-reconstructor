@@ -33,7 +33,7 @@ def build_docx(image_path, output_path, pipeline):
     doc = Document()
     for res in output:
         blocks = res['parsing_res_list']
-        blocks = sorted(blocks, key=lambda b: (b.order_index is None, b.order_index))
+        blocks = sort_blocks_with_bbox_fallback(res['parsing_res_list'])
         for block in blocks:
             label = block.label
             content = block.content.strip() if block.content else ""
