@@ -103,4 +103,11 @@ ocr-doc-reconstructor/
 
 └── requirements.txt
 
+## Deployment status
+
+Deployed to Streamlit Community Cloud: [live link here — grab it from your Streamlit Cloud dashboard]
+
+**Known constraint:** PP-StructureV3 loads 11 separate neural network models simultaneously (layout detection, OCR detection/recognition, table classification, table structure recognition ×2, table cell detection ×2, formula recognition, document orientation, text-line orientation). This exceeds Streamlit Community Cloud's free-tier 1GB RAM limit, causing the process to be silently killed by the OS once inference begins (confirmed via log analysis — the process terminates with no Python traceback, the signature of an out-of-memory kill rather than a code exception).
+
+The app runs successfully locally (tested on Windows with 32GB RAM) and would run on any hosting tier with more available memory. This is a genuine infrastructure/resource constraint rather than a code defect — a fix would involve either disabling unused PP-StructureV3 sub-modules (e.g. formula recognition, table recognition) to reduce loaded models, or deploying to infrastructure with a higher memory allowance.
 
