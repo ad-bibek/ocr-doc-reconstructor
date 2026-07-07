@@ -5,10 +5,12 @@ from docx.shared import Pt
 from bs4 import BeautifulSoup
 import tempfile
 import os
+import zipfile
+import io
 
 st.set_page_config(page_title="OCR Doc Reconstructor")
 st.title("Image to DOCX Converter")
-st.write("Upload a document image and get back a structured Word file.")
+st.write("Upload one or more document images and get back structured Word files.")
 
 @st.cache_resource
 def load_pipeline():
@@ -27,6 +29,7 @@ def add_html_table_to_doc(doc, html_content):
         for j, cell in enumerate(cells):
             if j < max_cols:
                 table.cell(i, j).text = cell.get_text(strip=True)
+
 def sort_blocks_with_bbox_fallback(blocks):
     ordered = [b for b in blocks if b.order_index is not None]
     ordered.sort(key=lambda b: b.order_index)
@@ -45,17 +48,18 @@ def sort_blocks_with_bbox_fallback(blocks):
 
     return result
 
-def build_docx(image_path, output_path, pipeline):
-    output = pipeline.predict(image_path)
-    doc = Document()
+def add_page_to_doc(doc, output, is_first_page=True):
+    """Adds one image's parsed content into an existing Document object."""
     for res in output:
-        blocks = res['parsing_res_list']
         blocks = sort_blocks_with_bbox_fallback(res['parsing_res_list'])
+
         for block in blocks:
             label = block.label
             content = block.content.strip() if block.content else ""
+
             if not content:
                 continue
+
             if label == 'paragraph_title':
                 doc.add_heading(content, level=1)
             elif label == 'doc_title':
@@ -66,32 +70,95 @@ def build_docx(image_path, output_path, pipeline):
             else:
                 p = doc.add_paragraph(content)
                 p.style.font.size = Pt(11)
+
+def build_docx_single(image_path, output_path, pipeline):
+    output = pipeline.predict(image_path)
+    doc = Document()
+    add_page_to_doc(doc, output)
     doc.save(output_path)
 
-uploaded_file = st.file_uploader("Upload an image", type=['png', 'jpg', 'jpeg'])
+def build_docx_combined(image_paths, output_path, pipeline, progress_callback=None):
+    doc = Document()
+    for idx, image_path in enumerate(image_paths):
+        output = pipeline.predict(image_path)
+        if idx > 0:
+            doc.add_page_break()
+        add_page_to_doc(doc, output)
+        if progress_callback:
+            progress_callback(idx + 1, len(image_paths))
+    doc.save(output_path)
 
-if uploaded_file is not None:
-    st.image(uploaded_file, caption="Uploaded image", width='stretch')
+uploaded_files = st.file_uploader(
+    "Upload one or more images",
+    type=['png', 'jpg', 'jpeg'],
+    accept_multiple_files=True
+)
 
-    if st.button("Convert to DOCX"):
-        with st.spinner("Processing... this may take a moment"):
-            pipeline = load_pipeline()
+if uploaded_files:
+    st.write(f"**{len(uploaded_files)} image(s) uploaded**")
 
-            with tempfile.TemporaryDirectory() as tmpdir:
-                input_path = os.path.join(tmpdir, uploaded_file.name)
-                with open(input_path, 'wb') as f:
-                    f.write(uploaded_file.getbuffer())
+    cols = st.columns(min(len(uploaded_files), 4))
+    for i, uf in enumerate(uploaded_files):
+        with cols[i % 4]:
+            st.image(uf, caption=uf.name, width='stretch')
 
-                output_path = os.path.join(tmpdir, "output.docx")
-                build_docx(input_path, output_path, pipeline)
+    mode = st.radio(
+        "Output mode",
+        ["Separate DOCX files (zipped)", "Combined into one DOCX"],
+        help="Separate: each image becomes its own Word file. Combined: all images become pages in one document, in upload order."
+    )
+
+    if st.button(f"Convert {len(uploaded_files)} image(s) to DOCX"):
+        pipeline = load_pipeline()
+        progress_bar = st.progress(0, text="Starting conversion...")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_paths = []
+            for uf in uploaded_files:
+                p = os.path.join(tmpdir, uf.name)
+                with open(p, 'wb') as f:
+                    f.write(uf.getbuffer())
+                input_paths.append(p)
+
+            if mode == "Separate DOCX files (zipped)":
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w') as zf:
+                    for i, (uf, input_path) in enumerate(zip(uploaded_files, input_paths)):
+                        progress_bar.progress(
+                            (i) / len(uploaded_files),
+                            text=f"Processing {uf.name} ({i+1}/{len(uploaded_files)})..."
+                        )
+                        output_name = os.path.splitext(uf.name)[0] + ".docx"
+                        output_path = os.path.join(tmpdir, output_name)
+                        build_docx_single(input_path, output_path, pipeline)
+                        zf.write(output_path, output_name)
+                    progress_bar.progress(1.0, text="Done!")
+
+                zip_buffer.seek(0)
+                st.success("Done! All files converted.")
+                st.download_button(
+                    label="Download ZIP of converted DOCX files",
+                    data=zip_buffer,
+                    file_name="converted_documents.zip",
+                    mime="application/zip"
+                )
+
+            else:
+                output_path = os.path.join(tmpdir, "combined_output.docx")
+
+                def update_progress(done, total):
+                    progress_bar.progress(done / total, text=f"Processing image {done}/{total}...")
+
+                build_docx_combined(input_paths, output_path, pipeline, update_progress)
+                progress_bar.progress(1.0, text="Done!")
 
                 with open(output_path, 'rb') as f:
                     docx_bytes = f.read()
 
-        st.success("Done!")
-        st.download_button(
-            label="Download DOCX",
-            data=docx_bytes,
-            file_name="converted_document.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+                st.success("Done!")
+                st.download_button(
+                    label="Download combined DOCX",
+                    data=docx_bytes,
+                    file_name="combined_document.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
