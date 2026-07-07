@@ -27,6 +27,23 @@ def add_html_table_to_doc(doc, html_content):
         for j, cell in enumerate(cells):
             if j < max_cols:
                 table.cell(i, j).text = cell.get_text(strip=True)
+def sort_blocks_with_bbox_fallback(blocks):
+    ordered = [b for b in blocks if b.order_index is not None]
+    ordered.sort(key=lambda b: b.order_index)
+
+    unordered = [b for b in blocks if b.order_index is None]
+
+    result = list(ordered)
+    for u_block in unordered:
+        u_y = u_block.bbox[1]
+        insert_pos = len(result)
+        for idx, o_block in enumerate(result):
+            if o_block.order_index is not None and o_block.bbox[1] > u_y:
+                insert_pos = idx
+                break
+        result.insert(insert_pos, u_block)
+
+    return result
 
 def build_docx(image_path, output_path, pipeline):
     output = pipeline.predict(image_path)
