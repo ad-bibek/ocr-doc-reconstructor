@@ -91,14 +91,21 @@ def build_docx(image_path, output_path):
     output = pipeline.predict(image_path)
 
     doc = Document()
+    previous_page_index = None
 
     for res in output:
-        # Build a list of (bbox, score) pairs from the raw OCR results
+        current_page_index = res.get('page_index')
+
+        # Insert a page break when moving to a new page (only for multi-page PDFs)
+        if previous_page_index is not None and current_page_index != previous_page_index:
+            doc.add_page_break()
+        previous_page_index = current_page_index
+
         ocr_res = res['overall_ocr_res']
         ocr_lines = [
-    (box, score) for box, text, score in zip(ocr_res['rec_boxes'], ocr_res['rec_texts'], ocr_res['rec_scores'])
-    if text.strip()  # skip empty/blank detections
-]
+            (box, score) for box, text, score in zip(ocr_res['rec_boxes'], ocr_res['rec_texts'], ocr_res['rec_scores'])
+            if text.strip()
+        ]
 
         blocks = sort_blocks_with_bbox_fallback(res['parsing_res_list'])
 
@@ -125,6 +132,9 @@ def build_docx(image_path, output_path):
 
     doc.save(output_path)
     print(f"Saved: {output_path}")
+
+if __name__ == "__main__":
+    build_docx('input_samples/test_multipage.pdf', 'output/multipage_test.docx')
 
 if __name__ == "__main__":
     build_docx('input_samples/alice.png', 'output/confidence_test3.docx')
