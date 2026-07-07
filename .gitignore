@@ -1,0 +1,20 @@
+# Environments
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Model downloads (these are cached in C:\Users\Bibek\.paddlex, not in this repo, but just in case)
+official_models/
+
+# Output files (generated, not source)
+output/*.json
+output/*.png
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Large sample images (optional — see note below)
+# input_samples/*.jpg
+# input_samples/*.png
