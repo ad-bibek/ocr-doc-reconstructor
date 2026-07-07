@@ -111,3 +111,10 @@ Deployed to Streamlit Community Cloud: [live link here — grab it from your Str
 
 The app runs successfully locally (tested on Windows with 32GB RAM) and would run on any hosting tier with more available memory. This is a genuine infrastructure/resource constraint rather than a code defect — a fix would involve either disabling unused PP-StructureV3 sub-modules (e.g. formula recognition, table recognition) to reduce loaded models, or deploying to infrastructure with a higher memory allowance.
 
+- **matplotlib** — renders LaTeX formulas (from PP-FormulaNet) as embedded images in the docx, since Word doesn't natively render LaTeX
+
+- **Formula rendering**: LaTeX formulas separated by `\quad` (side-by-side on one line) render as one combined image rather than being split into separate aligned equations. Full LaTeX syntax support is also partial, since matplotlib's math renderer doesn't implement the complete LaTeX command set.
+
+- **Confidence flagging**: paragraphs containing any OCR line below 90% confidence are highlighted yellow in the output docx, so a human reviewer knows exactly what to double-check. Matches per-word confidence scores to layout blocks via bounding-box overlap. Verified: correctly triggers on a degraded scan (Alice in Wonderland test) while leaving a clean scan (Peter Pan test) unhighlighted.
+
+- **Confidence flagging scope**: currently only applies to regular paragraph text — table cells and formula blocks are not yet confidence-checked individually.
