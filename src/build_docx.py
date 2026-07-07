@@ -1,7 +1,11 @@
 from paddleocr import PPStructureV3
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, Inches
 from bs4 import BeautifulSoup
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
+import io
 
 def add_html_table_to_doc(doc, html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -17,23 +21,35 @@ def add_html_table_to_doc(doc, html_content):
             if j < max_cols:
                 table.cell(i, j).text = cell.get_text(strip=True)
 
+def render_formula_to_image(doc, latex_content):
+    cleaned = latex_content.replace('\\begin{aligned}', '').replace('\\end{aligned}', '')
+    lines = cleaned.split('\\\\')
+
+    for line in lines:
+        line = line.replace('&', ' ').replace('\\quad', '   ').strip()
+        if not line:
+            continue
+
+        fig = plt.figure(figsize=(6, 0.6))
+        fig.text(0.01, 0.5, f'${line}$', fontsize=16, va='center')
+        plt.axis('off')
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150, transparent=True)
+        plt.close(fig)
+        buf.seek(0)
+
+        doc.add_picture(buf, width=Inches(4))
+
 def sort_blocks_with_bbox_fallback(blocks):
-    """
-    Blocks with a real order_index keep their relative order (this correctly
-    handles multi-column layouts, which a pure y-coordinate sort would break).
-    Blocks WITHOUT an order_index (headers, page numbers, sometimes tables)
-    get inserted into the sequence based on their vertical (y) position,
-    instead of being dumped at the end.
-    """
     ordered = [b for b in blocks if b.order_index is not None]
     ordered.sort(key=lambda b: b.order_index)
 
     unordered = [b for b in blocks if b.order_index is None]
 
-    # Insert each unordered block at the position matching its vertical location
     result = list(ordered)
     for u_block in unordered:
-        u_y = u_block.bbox[1]  # top y-coordinate of the block
+        u_y = u_block.bbox[1]
         insert_pos = len(result)
         for idx, o_block in enumerate(result):
             if o_block.order_index is not None and o_block.bbox[1] > u_y:
@@ -70,6 +86,9 @@ def build_docx(image_path, output_path):
             elif label == 'table':
                 add_html_table_to_doc(doc, content)
                 doc.add_paragraph("")
+            elif label == 'formula':
+                render_formula_to_image(doc, content)
+                doc.add_paragraph("")
             else:
                 p = doc.add_paragraph(content)
                 p.style.font.size = Pt(11)
@@ -78,4 +97,4 @@ def build_docx(image_path, output_path):
     print(f"Saved: {output_path}")
 
 if __name__ == "__main__":
-    build_docx('input_samples/anna_karenina.png', 'output/anna_karenina_v2.docx')
+    build_docx('input_samples/formula_test.png', 'output/formula_test.docx')
