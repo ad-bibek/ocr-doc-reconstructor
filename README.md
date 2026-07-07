@@ -118,3 +118,5 @@ The app runs successfully locally (tested on Windows with 32GB RAM) and would ru
 - **Confidence flagging**: paragraphs containing any OCR line below 90% confidence are highlighted yellow in the output docx, so a human reviewer knows exactly what to double-check. Matches per-word confidence scores to layout blocks via bounding-box overlap. Verified: correctly triggers on a degraded scan (Alice in Wonderland test) while leaving a clean scan (Peter Pan test) unhighlighted.
 
 - **Confidence flagging scope**: currently only applies to regular paragraph text — table cells and formula blocks are not yet confidence-checked individually.
+
+- **Multi-page PDF support**: `build_docx()` accepts PDFs directly (PaddleOCR/PP-StructureV3 natively iterates through pages via `pypdfium2`). A page break is inserted at each source PDF page boundary. Note: Word's own page count in the output may differ from the source PDF's page count, since Word reflows content according to its own margins/spacing — this is cosmetic, not a data loss issue.
